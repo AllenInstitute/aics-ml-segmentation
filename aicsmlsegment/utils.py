@@ -10,6 +10,9 @@ import argparse
 
 import yaml
 
+# debug
+import pdb
+
 def load_config(config_path):
     import torch
     config = _load_config_yaml(config_path)
@@ -60,80 +63,87 @@ def background_sub(img, r):
     return struct_img
 
 def input_normalization(img, args):
-
     #from aicsimageio import omeTifWriter
     #writer = omeTifWriter.OmeTifWriter('/allen/aics/assay-dev/Segmentation/DeepLearning/DNA_Labelfree_Evaluation/final_evaluation/test_before_norm.tiff')
     #writer.save(img[0,:,:,:])
     nchannel = img.shape[0]
     args.Normalization = int(args.Normalization)
-    for ch_idx in range(nchannel):
-        struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
-        if args.Normalization == 0: # min-max normalization
-            struct_img = (struct_img - struct_img.min() + 1e-8)/(struct_img.max() - struct_img.min() + 1e-7)
-        elif args.Normalization == 1: # mem: DO NOT CHANGE (FIXED FOR CAAX PRODUCTION)
-            m,s = stats.norm.fit(struct_img.flat)
-            strech_min = max(m - 2*s, struct_img.min())
-            strech_max = min(m + 11 *s, struct_img.max())
-            struct_img[struct_img>strech_max]=strech_max
-            struct_img[struct_img<strech_min]=strech_min
-            struct_img = (struct_img- strech_min + 1e-8)/(strech_max - strech_min + 1e-8)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 2: # nuc
-            #struct_img = simple_norm(struct_img, 2.5, 10, 1000, 300)
-            struct_img = simple_norm(struct_img, 2.5, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 4:
-            struct_img = simple_norm(struct_img, 1, 15)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 7: # cardio_wga
-            struct_img = simple_norm(struct_img, 1, 6)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 10: # lamin hipsc, DO NOT CHANGE (FIXED FOR LAMNB1 PRODUCTION)
-            img_valid = struct_img[struct_img>4000]
-            m,s = stats.norm.fit(img_valid.flat)
-            m,s = stats.norm.fit(struct_img.flat)
-            strech_min = struct_img.min()
-            strech_max = min(m + 25 *s, struct_img.max())
-            struct_img[struct_img>strech_max]=strech_max
-            struct_img = (struct_img- strech_min + 1e-8)/(strech_max - strech_min + 1e-8)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 12: # nuc
-            struct_img = background_sub(struct_img,50)
-            struct_img = simple_norm(struct_img, 2.5, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-            print('subtracted background')
-        elif args.Normalization == 11: 
-            struct_img = background_sub(struct_img,50)
-            #struct_img = simple_norm(struct_img, 2.5, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 13: # cellmask
-            #struct_img[struct_img>10000] = struct_img.min()
-            struct_img = background_sub(struct_img,50)
-            struct_img = simple_norm(struct_img, 2, 11)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 14:
-            struct_img = simple_norm(struct_img, 1, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 15: # lamin
-            struct_img[struct_img>4000] = struct_img.min()
-            struct_img = background_sub(struct_img,50)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 16: # lamin/h2b
-            struct_img = background_sub(struct_img,50)
-            struct_img = simple_norm(struct_img, 1.5, 6)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 17: # lamin
-            struct_img = background_sub(struct_img,50)
-            struct_img = simple_norm(struct_img, 1, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        elif args.Normalization == 18: # h2b
-            struct_img = background_sub(struct_img,50)
-            struct_img = simple_norm(struct_img, 1.5, 10)
-            img[ch_idx,:,:,:] = struct_img[:,:,:]
-        else:
-            print('no normalization recipe found')
-            quit()
-    return img
+
+    # if the model is 2D
+    if len(img.shape) == 3: # check if the image is 2D
+        struct_img = img[0,:,:]
+        struct_img = simple_norm(struct_img, 1, 6)
+        return struct_img
+
+    else:
+        for ch_idx in range(nchannel):
+            struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
+            if args.Normalization == 0: # min-max normalization
+                struct_img = (struct_img - struct_img.min() + 1e-8)/(struct_img.max() - struct_img.min() + 1e-7)
+            elif args.Normalization == 1: # mem: DO NOT CHANGE (FIXED FOR CAAX PRODUCTION)
+                m,s = stats.norm.fit(struct_img.flat)
+                strech_min = max(m - 2*s, struct_img.min())
+                strech_max = min(m + 11 *s, struct_img.max())
+                struct_img[struct_img>strech_max]=strech_max
+                struct_img[struct_img<strech_min]=strech_min
+                struct_img = (struct_img- strech_min + 1e-8)/(strech_max - strech_min + 1e-8)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 2: # nuc
+                #struct_img = simple_norm(struct_img, 2.5, 10, 1000, 300)
+                struct_img = simple_norm(struct_img, 2.5, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 4:
+                struct_img = simple_norm(struct_img, 1, 15)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 7: # cardio_wga
+                struct_img = simple_norm(struct_img, 1, 6)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 10: # lamin hipsc, DO NOT CHANGE (FIXED FOR LAMNB1 PRODUCTION)
+                img_valid = struct_img[struct_img>4000]
+                m,s = stats.norm.fit(img_valid.flat)
+                m,s = stats.norm.fit(struct_img.flat)
+                strech_min = struct_img.min()
+                strech_max = min(m + 25 *s, struct_img.max())
+                struct_img[struct_img>strech_max]=strech_max
+                struct_img = (struct_img- strech_min + 1e-8)/(strech_max - strech_min + 1e-8)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 12: # nuc
+                struct_img = background_sub(struct_img,50)
+                struct_img = simple_norm(struct_img, 2.5, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+                print('subtracted background')
+            elif args.Normalization == 11: 
+                struct_img = background_sub(struct_img,50)
+                #struct_img = simple_norm(struct_img, 2.5, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 13: # cellmask
+                struct_img[struct_img>10000] = struct_img.min()
+                struct_img = background_sub(struct_img,50)
+                struct_img = simple_norm(struct_img, 2, 11)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 14:
+                struct_img = simple_norm(struct_img, 1, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 15: # lamin
+                struct_img[struct_img>4000] = struct_img.min()
+                struct_img = background_sub(struct_img,50)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 16: # lamin/h2b
+                struct_img = background_sub(struct_img,50)
+                struct_img = simple_norm(struct_img, 1.5, 6)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 17: # lamin
+                struct_img = background_sub(struct_img,50)
+                struct_img = simple_norm(struct_img, 1, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            elif args.Normalization == 18: # h2b
+                struct_img = background_sub(struct_img,50)
+                struct_img = simple_norm(struct_img, 1.5, 10)
+                img[ch_idx,:,:,:] = struct_img[:,:,:]
+            else:
+                print('no normalization recipe found')
+                quit()
+        return img
 
 def image_normalization(img, config):
 
@@ -209,7 +219,6 @@ def load_single_image(args, fn, time_flag=False):
             img[ch_idx,:,:,:] = struct_img
 
     return img
-
 
 def compute_iou(prediction, gt, cmap):
 

@@ -1,0 +1,46 @@
+##########################################################################################################
+# model settings
+##########################################################################################################
+model: 
+  name: deeplabV3plus # not deeplabv3_imagenet since it will load weight from our trained network
+# path to the trained model
+model_path: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/aics-ml-segmentation/aicsmlsegment/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch'
+# number of input channels to the model
+nchannel: 1
+# number of output channels
+nclass: [2]
+# the channel to extract from output tensors
+OutputCh: [0, 1]
+# input patch size given to the network (adapt to fit in your GPU memory, generally bigger patches are better)
+size_in: [0]
+# prediction patch size from the network (change according to input size)
+size_out: [0]
+
+##########################################################################################################
+# Data Info
+##########################################################################################################
+# the path to output folder
+OutputDir: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/aics-ml-segmentation/aicsmlsegment/deeplab/test'
+# the index of the input channel
+InputCh: [1]
+# the method to normalize your data
+Normalization: 10
+# the threshold to be applied on your data
+Threshold: 0.8
+# whether to use run time augmentation (may improve the accuracy, but takes much longer to run)
+RuntimeAug: False
+
+##########################################################################################################
+# Execution mode: single file
+##########################################################################################################
+mode:
+  name: folder # change to file if single file test is wanted
+  DataType: merge.ome.tif
+  # paths to the file
+  InputDir: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/annotation_examples/need_annotation'
+  # InputFile: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/annotation_examples/melissa_gt/set3/'
+  # is this file a timelapse image
+  timelapse: False
+  # whether apply on full image or not
+  apply_on_full_image: True  
+  

@@ -9,7 +9,7 @@ import sys
 
 from aicsmlsegment.utils import get_logger
 
-SUPPORTED_MODELS = ['unet_xy_zoom', 'unet_xy']
+SUPPORTED_MODELS = ['unet_xy_zoom', 'unet_xy', 'unet_2d', 'unet_2d_deep', 'deeplabV3', 'deeplabV3_imagenet','deeplabV3plus', 'deeplabV3plus_imagenet']
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -94,11 +94,13 @@ def apply_on_image(model, input_img, softmax, args):
         return out0
 
 def model_inference(model, input_img, softmax, args):
-
     model.eval()
 
+    # check if the model is 2D or 3D
+    modelIs2D = len(args.size_in) == 2
+
     if args.size_in == args.size_out:
-        img_pad = np.np.expand_dims(input_img, axis=0) # add batch dimension
+        img_pad = np.expand_dims(input_img, axis=0) # add batch dimension
     else:  # zero padding on input image
         padding = [(x-y)//2 for x,y in zip(args.size_in, args.size_out)]
         img_pad0 = np.pad(input_img, ((0,0),(0,0),(padding[1],padding[1]),(padding[2],padding[2])), 'symmetric')#'constant')
@@ -109,45 +111,82 @@ def model_inference(model, input_img, softmax, args):
         output_img.append(np.zeros(input_img.shape))
 
     # loop through the image patch by patch
-    num_step_z = int(np.floor(input_img.shape[1]/args.size_out[0])+1)
-    num_step_y = int(np.floor(input_img.shape[2]/args.size_out[1])+1)
-    num_step_x = int(np.floor(input_img.shape[3]/args.size_out[2])+1)
+    if modelIs2D:
+        num_step_y = int(np.floor(input_img.shape[0]/args.size_out[0])+1)
+        num_step_x = int(np.floor(input_img.shape[1]/args.size_out[1])+1)
+    else:
+        num_step_z = int(np.floor(input_img.shape[1]/args.size_out[0])+1)
+        num_step_y = int(np.floor(input_img.shape[2]/args.size_out[1])+1)
+        num_step_x = int(np.floor(input_img.shape[3]/args.size_out[2])+1)
 
     with torch.no_grad():
-        for ix in range(num_step_x):
-            if ix<num_step_x-1:
-                xa = ix * args.size_out[2]
-            else:
-                xa = input_img.shape[3] - args.size_out[2]
-
-            for iy in range(num_step_y):
-                if iy<num_step_y-1:
-                    ya = iy * args.size_out[1]
+        # if the image and trained model is 2D
+        if modelIs2D:
+            for ix in range(num_step_x):
+                if ix<num_step_x-1:
+                    xa = ix * args.size_out[1]
                 else:
-                    ya = input_img.shape[2] - args.size_out[1]
-
-                for iz in range(num_step_z):
-                    if iz<num_step_z-1:
-                        za = iz * args.size_out[0]
+                    xa = input_img.shape[1]-args.size_out[1]
+                
+                for iy in range(num_step_y):
+                    if iy<num_step_y-1:
+                        ya = iy * args.size_out[0]
                     else:
-                        za = input_img.shape[1] - args.size_out[0]
+                        ya = input_img.shape[0] - args.size_out[0]
 
                     # build the input patch
-                    input_patch = img_pad[ : ,za:(za+args.size_in[0]) ,ya:(ya+args.size_in[1]) ,xa:(xa+args.size_in[2])]
-                    input_img_tensor = torch.from_numpy(input_patch.astype(float)).float()
+                    input_patch = img_pad[:, ya:(ya+args.size_in[0]) ,xa:(xa+args.size_in[1])]
 
+                    input_patch = np.stack([input_patch,input_patch, input_patch],axis=1)[0,...]
+                    input_img_tensor = torch.from_numpy(input_patch).float()
                     tmp_out = model(Variable(input_img_tensor.cuda()).unsqueeze(0))
                     assert len(args.OutputCh)//2 <= len(tmp_out), print('the parameter OutputCh is not compatible with the number of output tensors')
 
-                    for ch_idx in range(len(args.OutputCh)//2):
-                        label = tmp_out[args.OutputCh[ch_idx*2]]
-                        prob = softmax(label)
-
+                    if args.nclass == [3]:
+                        out_flat_tensor = np.argmax(tmp_out.cpu().data.float(), axis = -1)
+                        out_nda = out_flat_tensor.view(args.size_out[0],args.size_out[1])
+                        output_img[0][ya:(ya+args.size_out[0]), xa:(xa+args.size_out[1])] = out_nda[:,:]
+                    else:
+                        prob = softmax(tmp_out)
                         out_flat_tensor = prob.cpu().data.float()
-                        out_tensor = out_flat_tensor.view(args.size_out[0], args.size_out[1], args.size_out[2], args.nclass[ch_idx])
+                        out_tensor = out_flat_tensor.view(args.size_out[0], args.size_out[1], args.nclass[0])
                         out_nda = out_tensor.numpy()
+                        output_img[0][ya:(ya+args.size_out[0]), xa:(xa+args.size_out[1])] = out_nda[:,:,args.OutputCh[1]]
+        else:
+            for ix in range(num_step_x):
+                if ix<num_step_x-1:
+                    xa = ix * args.size_out[2]
+                else:
+                    xa = input_img.shape[3] - args.size_out[2]
 
-                        output_img[ch_idx][0,za:(za+args.size_out[0]), ya:(ya+args.size_out[1]), xa:(xa+args.size_out[2])] = out_nda[:,:,:,args.OutputCh[ch_idx*2+1]]
+                for iy in range(num_step_y):
+                    if iy<num_step_y-1:
+                        ya = iy * args.size_out[1]
+                    else:
+                        ya = input_img.shape[2] - args.size_out[1]
+
+                    for iz in range(num_step_z):
+                        if iz<num_step_z-1:
+                            za = iz * args.size_out[0]
+                        else:
+                            za = input_img.shape[1] - args.size_out[0]
+
+                        # build the input patch
+                        input_patch = img_pad[ : ,za:(za+args.size_in[0]) ,ya:(ya+args.size_in[1]) ,xa:(xa+args.size_in[2])]
+                        input_img_tensor = torch.from_numpy(input_patch.astype(float)).float()
+
+                        tmp_out = model(Variable(input_img_tensor.cuda()).unsqueeze(0))
+                        assert len(args.OutputCh)//2 <= len(tmp_out), print('the parameter OutputCh is not compatible with the number of output tensors')
+
+                        for ch_idx in range(len(args.OutputCh)//2):
+                            label = tmp_out[args.OutputCh[ch_idx*2]]
+                            prob = softmax(label)
+
+                            out_flat_tensor = prob.cpu().data.float()
+                            out_tensor = out_flat_tensor.view(args.size_out[0], args.size_out[1], args.size_out[2], args.nclass[ch_idx])
+                            out_nda = out_tensor.numpy()
+
+                            output_img[ch_idx][0,za:(za+args.size_out[0]), ya:(ya+args.size_out[1]), xa:(xa+args.size_out[2])] = out_nda[:,:,:,args.OutputCh[ch_idx*2+1]]
 
     return output_img
 
@@ -214,8 +253,73 @@ def build_model(config):
     elif name =='unet_xy_zoom':
         from aicsmlsegment.Net3D.unet_xy_enlarge import UNet3D as DNN
         model = DNN(config['nchannel'], config['nclass'], model_config.get('zoom_ratio',3))
+    elif name == 'unet_2d':
+        from aicsmlsegment.Net2D.uNet_2D import UNet2D as DNN
+        model = DNN(config['nchannel'], config['nclass'])
+    elif name == 'unet_2d_deep':
+        from aicsmlsegment.Net2D.uNet_2D_deep import UNet2D as DNN
+        model = DNN(config['nchannel'], config['nclass'])
+    elif name == 'deeplabV3': # deeplab without pre-training
+        from aicsmlsegment.Net2D.deeplabV3 import deeplabV3 as DNN
+        model = DNN(config['nclass'],False)
+    elif name == 'deeplabV3_imagenet': # deeplab with Imagenet pre-taining
+        from aicsmlsegment.Net2D.deeplabV3 import deeplabV3 as DNN
+        model = DNN(config['nclass'],True)
+    elif name == 'deeplabV3plus': # deeplab without pre-training
+        from aicsmlsegment.Net2D.deeplabV3 import deeplabV3_plus as DNN
+        model = DNN(config['nclass'],False)
+    elif name == 'deeplabV3plus_imagenet': # deeplab with Imagenet pre-taining
+        from aicsmlsegment.Net2D.deeplabV3 import deeplabV3_plus as DNN
+        model = DNN(config['nclass'],True)
+
     
     model = model.apply(weights_init)
     print('model initialization succeeds !')
     model = model.to(config['device'])
     return model
+
+
+def apply_on_full_image(model, input_img, softmax, args):
+
+    from PIL import Image
+    print('doing runtime augmentation')
+    #import pathlib
+    #from aicsimageio import omeTifWriter
+
+    input_img_aug = input_img.copy()
+    # input_img_aug = np.expand_dims(input_img_aug, axis=0)
+
+    flip1 = np.flipud(input_img_aug)
+    out1 = model_inference_full_img(model, flip1, softmax, args)
+
+    flip2 = np.fliplr(input_img_aug)
+    out2 = model_inference_full_img(model, flip2, softmax, args)
+
+    flip3 = np.flipud(np.fliplr(input_img_aug))
+    out3 = model_inference_full_img(model, flip3, softmax, args)
+
+    flip4 = np.fliplr(np.flipud(input_img_aug))
+    out4 = model_inference_full_img(model, flip4, softmax, args)
+
+    out = (np.flipud(out1) + np.fliplr(out2) + np.flipud(np.fliplr(out3)) + np.fliplr(np.flipud(out4)))/4
+    # import pdb; pdb.set_trace()
+    return out
+
+def model_inference_full_img(model, input_img, softmax, args):
+    model.eval()
+    input_img = np.expand_dims(input_img, axis=0)
+    with torch.no_grad():
+        # if the image and trained model is 2D
+        # for deeplab################################
+        input_img_stack = np.stack([input_img,input_img, input_img],axis=1)[0,...]
+        input_img_tensor = torch.from_numpy(input_img_stack).float()
+        tmp_out = model(Variable(input_img_tensor.cuda()).unsqueeze(0))
+        ###########################################################3
+
+        prob = softmax(tmp_out)
+        out_flat_tensor = prob.cpu().data.float()
+        out_tensor = out_flat_tensor.view(input_img.shape[1], input_img.shape[2], args.nclass[0])
+        output_img= out_tensor.numpy()
+
+
+    return output_img

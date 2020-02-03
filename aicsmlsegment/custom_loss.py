@@ -1,9 +1,9 @@
-
 from torch.autograd import Variable, Function
 import torch.optim as optim
 import torch.nn as nn
 import torch
 import numpy as np
+import pdb
 
 class ElementNLLLoss(torch.nn.Module):
 	def __init__(self, num_class):
@@ -16,14 +16,29 @@ class ElementNLLLoss(torch.nn.Module):
 		target_np = target_np.astype(int)
 
 		row_num = target_np.shape[0]
-		mask = np.zeros((row_num,self.num_class )) 
-		mask[np.arange(row_num), target_np]=1
-		class_x = torch.masked_select(input, Variable(torch.from_numpy(mask).cuda().byte()))
+		mask = np.zeros((row_num,self.num_class ), dtype=bool)
+		mask[np.arange(row_num), target_np]=True
+		class_x = torch.masked_select(input, Variable(torch.from_numpy(mask).cuda()))
 
 		out = torch.mul(class_x,weight)
 		loss = torch.mean(torch.neg(out),0)
 
 		return loss
+
+def Binary_Dice(input, target):
+    # change target to one-hot matrix
+    target_one_hot = nn.functional.one_hot(target.long(), num_classes = 2)
+
+    input_flat = torch.exp(input.cpu().data)
+
+    target_flat = target_one_hot.view(input.shape).cpu().data.float()
+
+    top = 2. * torch.sum(input_flat * target_flat,[1])
+    bottom = torch.sum(input_flat + target_flat,[1])
+
+    dice = -torch.mean(top / (bottom+0.000001))
+        
+    return dice
 
 class MultiAuxillaryElementNLLLoss(torch.nn.Module):
 	def __init__(self,num_task, weight, num_class):
@@ -37,10 +52,13 @@ class MultiAuxillaryElementNLLLoss(torch.nn.Module):
 	
 	def forward(self, input, target, cmap):
 
-		total_loss = self.weight[0]*self.criteria_list[0](input[0], target.view(target.numel()), cmap.view(cmap.numel()) )
+		if self.num_task == 1:
+			total_loss = self.criteria_list[0](input, target.view(target.numel()), cmap.view(cmap.numel()) ) #+ 0.5 * Binary_Dice(input, target)
+		else:
+			total_loss = self.weight[0]*self.criteria_list[0](input[0], target.view(target.numel()), cmap.view(cmap.numel()) )
 
-		for nn in np.arange(1,self.num_task):
-			total_loss = total_loss + self.weight[nn]*self.criteria_list[nn](input[nn], target.view(target.numel()), cmap.view(cmap.numel()) )
+			for nn in np.arange(1,self.num_task):
+				total_loss = total_loss + self.weight[nn]*self.criteria_list[nn](input[nn], target.view(target.numel()), cmap.view(cmap.numel()) )
 
 		return total_loss
 

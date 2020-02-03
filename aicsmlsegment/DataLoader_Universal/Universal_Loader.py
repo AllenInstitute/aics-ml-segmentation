@@ -10,7 +10,15 @@ from random import shuffle
 import time
 from torchvision.transforms import ToTensor
 from torch.utils.data import Dataset
+from sklearn.feature_extraction.image import extract_patches_2d
+from aicsmlsegment.utils import simple_norm, background_sub
 
+# For augmentation
+from torch.nn.functional import grid_sample, affine_grid
+from skimage.transform import resize
+import torch
+# import warnings # for grid_sample warning
+# warnings.filterwarnings("once")
 
 # CODE for generic loader
 #   No augmentation = NOAUG,simply load data and convert to tensor
@@ -393,3 +401,178 @@ class NOAUG_M(Dataset):
 
     def __len__(self):
         return len(self.img)
+
+class AUG_M_2D(Dataset):
+    '''
+    Dataloader for 2D input that returns flip and spatial data augmentated image, label, and weight map.
+    TODO: Fix the gird_sample warning issu
+    '''
+
+    def __init__(self, filenames, num_patch, size_in, size_out):
+
+        self.img = []
+        self.gt = []
+        self.cmap = []
+
+        if len(filenames) < 40:
+            sample_num = 20
+        else:
+            sample_num = len(filenames)//2
+
+        sampled = np.random.choice(filenames, size=sample_num, replace=False)
+        for img_idx, fn in enumerate(sampled):
+            
+            label_reader = AICSImage(fn+'_GT.ome.tif')
+            label = label_reader.data
+            label = label[0,0,0,0,:,:]
+
+            # if label is other than [0,1], change it to [0,1]
+            label_range = np.unique(label).tolist()
+            if label_range != [0,1]:
+                label[label == label_range[1]] = 1
+            
+            # import image
+            input_reader = AICSImage(fn+'.ome.tif')
+            input_img = input_reader.data
+            if input_img.shape[3] == 1: # when it is single channel
+                input_img = input_img[0,0,0,0,:,:]
+            else:
+                input_img = input_img[0,0,0,1,:,:]
+
+            # normalize the image in range of [0, 1]
+            if not (np.min(input_img) == 0 and np.max(input_img) == 1): # if image has not been normalized
+                input_img = simple_norm(input_img, 1, 6)
+            
+            costmap_reader = AICSImage(fn+'_CM.ome.tif')
+            costmap = costmap_reader.data
+            costmap = costmap[0,0,0,0,:,:]
+
+            # concatenate raw, label ,and costmap before spliting into patches
+            image_array = np.stack([input_img, label, costmap], axis = 2)
+
+            # randomly generate 2d patches
+            input_img_patch = extract_patches_2d(image_array, size_in, max_patches = num_patch)
+
+            input_img = input_img_patch[:,:,:,0]
+            label = input_img_patch[:,:,:,1]
+            costmap = input_img_patch[:,:,:,2]
+            
+            for patches in range(num_patch):
+
+                # flip augmentation
+                h_flip = np.random.randint(2, dtype='bool')
+                if not h_flip:
+                    v_flip = np.random.randint(2, dtype='bool')
+
+                if h_flip or v_flip:
+                    if h_flip:
+                        image_aug = np.fliplr(input_img[patches,:,:])
+                        cmap_aug = np.fliplr(costmap[patches,:,:])
+                        label_aug = np.fliplr(label[patches,:,:])
+                    else:
+                        image_aug = np.flipud(input_img[patches,:,:])
+                        cmap_aug = np.flipud(costmap[patches,:,:])
+                        label_aug = np.flipud(label[patches,:,:])
+                
+                else:
+                    image_aug = input_img[patches,:,:]
+                    label_aug = label[patches,:,:]
+                    cmap_aug = costmap[patches,:,:]
+
+                random_aug = self.spatial_data_augmentation(image_aug.astype(float), label_aug.astype(float), cmap_aug.astype(float), size_in)
+
+                augmented_img = random_aug[0][0,:,:,:]
+                augmented_gt = random_aug[1][0,:,:,:]
+                augmented_cmap = random_aug[2][0,:,:,:]
+
+                (self.img).append(augmented_img)
+                (self.gt).append(augmented_gt)
+                (self.cmap).append(augmented_cmap)
+              
+    def __getitem__(self, index):
+
+        image_tensor = self.img[index]
+        cmap_tensor = self.cmap[index]
+        label_tensor = self.gt[index]
+
+        return image_tensor.float(), label_tensor.float(), cmap_tensor.float()
+
+    def __len__(self):
+        return len(self.img)
+
+    def spatial_data_augmentation(self, img, label, cmap, size):
+        '''
+        Performs full 2D deformation using random flow. Unlike rotation or flip, spatial data augmentation provides
+        full 2D deformation that can provide the model robustness.
+        '''
+    
+        # Generate a smooth random field by resizing the small random matrix
+        random_array = np.random.rand(16,16)
+        da_factor = np.random.random(1) * 0.125
+        random_array = random_array * da_factor
+        smooth_field = resize(random_array, size)
+        smooth_field = np.stack([smooth_field, smooth_field], axis = 2)
+        smooth_field = np.reshape(smooth_field, (1,) + smooth_field.shape)
+        smooth_field = from_numpy(smooth_field).float()
+
+        # changing the data to tensor
+        img_tensor, label_tensor, cmap_tensor = self.transform_tensor(img, label, cmap)
+
+        # Generate grid for affine transformation
+        id_grid = torch.nn.functional.affine_grid(torch.FloatTensor([[[1, 0, 0],[0, 1, 0]]]), size=(1,1,size[0],size[1]))
+
+        # Augment target with affine grid + smoooth random field to perform full 2D deformation
+        img_aug = grid_sample(img_tensor, id_grid+smooth_field)
+        label_aug = grid_sample(label_tensor, id_grid+smooth_field, mode = 'nearest')
+        cmap_aug = grid_sample(cmap_tensor, id_grid+smooth_field, mode = 'nearest')
+
+
+        img_aug = torch.stack([img_aug,img_aug,img_aug], axis=2)
+        img_aug = torch.squeeze(img_aug, dim=0)
+
+        return (img_aug, label_aug, cmap_aug)
+
+    def random_patch(self, image_array, label_array, cmap_array, patch_size, max_patches):
+        '''
+        Function that generates random patch for image and corresponding label and weight map.
+        TODO: need to change to cpu tensor based
+        '''
+        image_size = image_array.shape # get image size
+
+        # Array to store pathces
+        cropped_img = []
+        cropped_gt = []
+        cropped_cmap = []
+
+        # Randomly generate given number of patches
+        for patch in range(max_patches):
+            upper_left_y = np.random.randint(0,image_size[0]-patch_size[0]-1)
+            upper_left_x = np.random.randint(0,image_size[1]-patch_size[1]-1)
+
+            lower_right_y = upper_left_y + patch_size[0]
+            lower_right_x = upper_left_x + patch_size[1]
+
+            cropped_img.append(image_array[upper_left_y:lower_right_y, upper_left_x:lower_right_x])
+            cropped_gt.append(label_array[upper_left_y:lower_right_y, upper_left_x:lower_right_x])
+            cropped_cmap.append(cmap_array[upper_left_y:lower_right_y, upper_left_x:lower_right_x])
+
+
+        return (cropped_img, cropped_gt, cropped_cmap)
+
+    def transform_tensor(self, img, label, cmap, nthread=32):
+        '''
+        Transforms the image, label, and weight map into the float cpu tensor.
+        '''
+        
+        torch.set_num_threads(nthread)
+
+        img = np.reshape(img, (1,) + (1,) + img.shape)
+        img_tensor = from_numpy(img).float().cpu()
+
+        label = np.reshape(label, (1,) + (1,) + label.shape)
+        label_tensor = from_numpy(label).float().cpu()
+
+        cmap = np.reshape(cmap, (1,) + (1,) + cmap.shape)
+        cmap_tensor = from_numpy(cmap).float().cpu()
+
+        return (img_tensor, label_tensor, cmap_tensor)

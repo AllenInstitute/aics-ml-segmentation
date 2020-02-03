@@ -19,10 +19,17 @@ from aicsimageio import AICSImage
 
 from aicsmlsegment.custom_loss import MultiAuxillaryElementNLLLoss
 from aicsmlsegment.custom_metrics import DiceCoefficient, MeanIoU, AveragePrecision
-from aicsmlsegment.model_utils import load_checkpoint, save_checkpoint, model_inference
-from aicsmlsegment.utils import compute_iou, get_logger, load_single_image, input_normalization
+from aicsmlsegment.model_utils import load_checkpoint, save_checkpoint, model_inference, apply_on_full_image
+from aicsmlsegment.utils import compute_iou, get_logger, load_single_image, input_normalization, simple_norm, background_sub
 
-SUPPORTED_LOSSES = ['Aux'] 
+# for debugging
+import pdb
+from skimage.io import imsave
+import pandas as pd
+import torchvision
+import torch.nn.functional as F
+
+SUPPORTED_LOSSES = ['Aux', 'loss_2D'] 
 
 def build_optimizer(config, model):
     learning_rate = config['learning_rate']
@@ -46,6 +53,10 @@ def get_loss_criterion(config):
     #TODO: add more loss functions
     if name == 'Aux':
         return MultiAuxillaryElementNLLLoss(3, loss_config['loss_weight'],  config['nclass'])
+    elif name == 'loss_2D':
+        return MultiAuxillaryElementNLLLoss(1, loss_config['loss_weight'],  config['nclass'])
+    elif name == 'focal':
+        return Focal_Loss(1)
 
 
 def get_train_dataloader(config):
@@ -85,6 +96,20 @@ def shuffle_split_filenames(datafolder, leaveout):
         train_filenames.append(filenames[fn][:-11])
 
     return train_filenames, valid_filenames
+
+def save_validation_process(ori_img, prediction, saving_dir, epoch):
+    '''
+    Saves the original validation image and it's prediction for every validation step
+    '''
+    # check if validation direction exists 
+    valid_save_dir = saving_dir +'/validation'
+    if not os.path.exists(valid_save_dir):
+        os.makedirs(valid_save_dir)
+
+    if not os.path.exists(valid_save_dir + "/val_in.tiff"):
+        imsave(valid_save_dir + "/val_in.tiff", ori_img)
+    imsave(valid_save_dir + "/epoch_" + str(epoch) + "_val_out.tiff", prediction.astype("uint8"))
+
 
 class BasicFolderTrainer:
     """basic version of trainer.
@@ -175,12 +200,15 @@ class BasicFolderTrainer:
         ### load settings ###
         config = self.config #TODO, fix this
         model = self.model
+        # model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=False, progress=True, num_classes=2, aux_loss=None).cuda() # using deeplabv3
 
         # define loss 
         #TODO, add more loss
         loss_config = config['loss']
         if loss_config['name']=='Aux':
             criterion = MultiAuxillaryElementNLLLoss(3,loss_config['loss_weight'], config['nclass'])
+        elif loss_config['name'] == 'loss_2D':
+            criterion = MultiAuxillaryElementNLLLoss(1, loss_config['loss_weight'],  config['nclass'])
         else:
             print('do not support other loss yet')
             quit()
@@ -189,12 +217,18 @@ class BasicFolderTrainer:
         validation_config = config['validation']
         loader_config = config['loader']
         args_inference=lambda:None
+
+        # configure dimension of the data
+        data_dim = 3 # default data dimension is 3
+        if loader_config['name'] == '2d_loader':
+            data_dim = 2 # change data dimension to 2
         if validation_config['metric'] is not None:
             print('prepare the data ... ...')
             filenames = glob(loader_config['datafolder'] + '/*_GT.ome.tif')
             filenames.sort()
             total_num = len(filenames)
             LeaveOut = validation_config['leaveout']
+
             if len(LeaveOut)==1:
                 if LeaveOut[0]>0 and LeaveOut[0]<1:
                     num_train = int(np.floor((1-LeaveOut[0]) * total_num))
@@ -232,14 +266,21 @@ class BasicFolderTrainer:
         elif loader_config['name']=='focus':
             from aicsmlsegment.DataLoader3D.Universal_Loader import RR_FH_M0C as train_loader
             train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
+        elif loader_config['name'] == '2d_loader':
+            from aicsmlsegment.DataLoader_Universal.Universal_Loader import AUG_M_2D as train_loader
+            train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=False)
         else:
             print('other loader not support yet')
             quit()
+
 
         num_iterations = 0 
         num_epoch = 0 #TODO: load num_epoch from checkpoint
 
         start_epoch = num_epoch
+        
+        df = pd.DataFrame({'Epoch': [], 'Train Loss': [], 'Validation Loss': []})
+
         for _ in range(start_epoch, config['epochs']+1):
 
             # sets the model in training mode
@@ -252,7 +293,12 @@ class BasicFolderTrainer:
             if num_epoch>0 and  num_epoch % loader_config['epoch_shuffle'] ==0:
                 print('shuffling data')
                 train_set_loader = None
-                train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
+                
+                # if 2d loader, shuffle option is not used
+                if loader_config['name'] == '2d_loader':
+                    train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=False)
+                else:
+                    train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
 
             # Training starts ...
             epoch_loss = []
@@ -261,6 +307,8 @@ class BasicFolderTrainer:
                     
                 inputs = Variable(current_batch[0].cuda())
                 targets = current_batch[1]
+
+
                 outputs = model(inputs)
 
                 if len(targets)>1:
@@ -268,14 +316,12 @@ class BasicFolderTrainer:
                         targets[zidx] = Variable(targets[zidx].cuda())
                 else: 
                     targets = Variable(targets[0].cuda())
-
                 optimizer.zero_grad()
                 if len(current_batch)==3: # input + target + cmap
                     cmap = Variable(current_batch[2].cuda())
                     loss = criterion(outputs, targets, cmap)
                 else: # input + target
                     loss = criterion(outputs,targets)
-                    
                 loss.backward()
                 optimizer.step()
 
@@ -286,53 +332,99 @@ class BasicFolderTrainer:
 
             # validation
             if num_epoch % validation_config['validate_every_n_epoch'] ==0:
-                validation_loss = np.zeros((len(validation_config['OutputCh'])//2,))
+                validation_loss = 0
+                # validation_loss = np.zeros((len(validation_config['OutputCh'])//2,))
                 model.eval() 
-
+                # outputs_list = []
                 for img_idx, fn in enumerate(valid_filenames):
 
-                    # target 
-                    label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
-                    label = label_reader.data
-                    label = np.squeeze(label,axis=0) # 4-D after squeeze
+                    if data_dim == 3: # when data is 3D
+                        # target 
+                        label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
+                        label = label_reader.data
+                        label = np.squeeze(label,axis=0) # 4-D after squeeze
 
-                    # when the tif has only 1 channel, the loaded array may have falsely swaped dimensions (ZCYX). we want CZYX
-                    # (This may also happen in different OS or different package versions)
-                    # ASSUMPTION: we have more z slices than the number of channels 
-                    if label.shape[1]<label.shape[0]: 
-                        label = np.transpose(label,(1,0,2,3))
+                        # when the tif has only 1 channel, the loaded array may have falsely swaped dimensions (ZCYX). we want CZYX
+                        # (This may also happen in different OS or different package versions)
+                        # ASSUMPTION: we have more z slices than the number of channels 
+                        if label.shape[1]<label.shape[0]: 
+                            label = np.transpose(label,(1,0,2,3))
 
-                    # input image
-                    input_reader = AICSImage(fn+'.ome.tif') #CZYX  #TODO: check size
-                    input_img = input_reader.data
-                    input_img = np.squeeze(input_img,axis=0)
-                    if input_img.shape[1] < input_img.shape[0]:
-                        input_img = np.transpose(input_img,(1,0,2,3))
+                        # input image
+                        input_reader = AICSImage(fn+'.ome.tif') #CZYX  #TODO: check size
+                        input_img = input_reader.data
+                        input_img = np.squeeze(input_img,axis=0)
+                        if input_img.shape[1] < input_img.shape[0]:
+                            input_img = np.transpose(input_img,(1,0,2,3))
 
-                    # cmap tensor
-                    costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
-                    costmap = costmap_reader.data
-                    costmap = np.squeeze(costmap,axis=0)
-                    if costmap.shape[0] == 1:
+                        # cmap tensor
+                        costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
+                        costmap = costmap_reader.data
                         costmap = np.squeeze(costmap,axis=0)
-                    elif costmap.shape[1] == 1:
-                        costmap = np.squeeze(costmap,axis=1)
+                        if costmap.shape[0] == 1:
+                            costmap = np.squeeze(costmap,axis=0)
+                        elif costmap.shape[1] == 1:
+                            costmap = np.squeeze(costmap,axis=1)
+
+                    else: # when data is 2D
+                        # target
+                        label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
+                        label = label_reader.data
+                        label = label[0,0,0,0,:,:]
+
+                        # if label is other than [0,1], change it to [0,1]
+                        label_range = np.unique(label).tolist()
+                        if label_range != [0,1]:
+                            label[label == label_range[1]] = 1
+
+                        # input image
+                        input_reader = AICSImage(fn+'.ome.tif') #CZYX  #TODO: check size
+                        input_img = input_reader.data
+                        if input_img.shape[3] == 1: # when it is single channel
+                            input_img = input_img[0,0,0,0,:,:]
+                        else:
+                            input_img = input_img[0,0,0,1,:,:]
+                        original_img = input_img
+                        
+                        # Normalize the img
+                        input_img = simple_norm(input_img, 1, 6)
+
+                        # cmap tensor
+                        costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
+                        costmap = costmap_reader.data
+                        costmap = costmap[0,0,0,0,:,:]
 
                     # output 
-                    outputs = model_inference(model, input_img, model.final_activation, args_inference)
-                    
-                    assert len(validation_config['OutputCh'])//2 == len(outputs)
+                    # checks if model predict on full image or patch
+                    if config['validation']['apply_on_full_image']:
+                        outputs = apply_on_full_image(model, input_img, model.final_activation, args_inference)
+                    else: 
+                        outputs = model_inference(model, input_img, model.final_activation, args_inference)
 
-                    for vi in range(len(outputs)):
-                        if label.shape[0]==1: # the same label for all output
-                            validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[0,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
-                        else:
-                            validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[vi,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
+                    if data_dim == 2: # when 2D model
+                        outputs = outputs[:,:,1] > 0.7
+                        output_img = outputs.astype(np.uint8)
+                        output_img[output_img>0]=255
+                        validation_loss += compute_iou(outputs, label[:,:]==validation_config['OutputCh'][1], costmap)
+
+                        if config['validation']['val_process']:
+                            save_validation_process(original_img, output_img, config['checkpoint_dir'], num_epoch)
+                    else:    
+                        assert len(validation_config['OutputCh'])//2 == len(outputs)
+                        for vi in range(len(outputs)):
+                            if label.shape[0]==1: # the same label for all output
+                                validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[0,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
+                            else:
+                                validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[vi,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
+                        
+                    
 
 
                 
                 average_validation_loss = validation_loss / len(valid_filenames)
                 print(f'Epoch: {num_epoch}, Training Loss: {average_training_loss}, Validation loss: {average_validation_loss}')
+
+
             else:
                 print(f'Epoch: {num_epoch}, Training Loss: {average_training_loss}')
 
@@ -347,9 +439,7 @@ class BasicFolderTrainer:
                     'device': str(self.device),
                     }, checkpoint_dir=config['checkpoint_dir'], logger=self.logger)
             num_epoch += 1
-
-        # TODO: add validation step
-
+	
 
     '''
     def validate(self):
@@ -449,3 +539,4 @@ class BasicFolderTrainer:
         for name, batch in sources.items():
             for tag, image in self._images_from_batch(name, batch):
                 self.writer.add_image(tag, image, self.num_iterations, dataformats='HW')
+
