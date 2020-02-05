@@ -55,8 +55,6 @@ def get_loss_criterion(config):
         return MultiAuxillaryElementNLLLoss(3, loss_config['loss_weight'],  config['nclass'])
     elif name == 'loss_2D':
         return MultiAuxillaryElementNLLLoss(1, loss_config['loss_weight'],  config['nclass'])
-    elif name == 'focal':
-        return Focal_Loss(1)
 
 
 def get_train_dataloader(config):

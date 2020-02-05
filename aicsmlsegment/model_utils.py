@@ -9,7 +9,7 @@ import sys
 
 from aicsmlsegment.utils import get_logger
 
-SUPPORTED_MODELS = ['unet_xy_zoom', 'unet_xy', 'unet_2d', 'unet_2d_deep', 'deeplabV3', 'deeplabV3_imagenet','deeplabV3plus', 'deeplabV3plus_imagenet']
+SUPPORTED_MODELS = ['unet_xy_zoom', 'deeplabV3', 'deeplabV3_imagenet','deeplabV3plus', 'deeplabV3plus_imagenet']
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -253,12 +253,6 @@ def build_model(config):
     elif name =='unet_xy_zoom':
         from aicsmlsegment.Net3D.unet_xy_enlarge import UNet3D as DNN
         model = DNN(config['nchannel'], config['nclass'], model_config.get('zoom_ratio',3))
-    elif name == 'unet_2d':
-        from aicsmlsegment.Net2D.uNet_2D import UNet2D as DNN
-        model = DNN(config['nchannel'], config['nclass'])
-    elif name == 'unet_2d_deep':
-        from aicsmlsegment.Net2D.uNet_2D_deep import UNet2D as DNN
-        model = DNN(config['nchannel'], config['nclass'])
     elif name == 'deeplabV3': # deeplab without pre-training
         from aicsmlsegment.Net2D.deeplabV3 import deeplabV3 as DNN
         model = DNN(config['nclass'],False)
@@ -280,14 +274,12 @@ def build_model(config):
 
 
 def apply_on_full_image(model, input_img, softmax, args):
-
-    from PIL import Image
+    '''
+    Inference on full image wiht runtime augmentation
+    '''
     print('doing runtime augmentation')
-    #import pathlib
-    #from aicsimageio import omeTifWriter
 
     input_img_aug = input_img.copy()
-    # input_img_aug = np.expand_dims(input_img_aug, axis=0)
 
     flip1 = np.flipud(input_img_aug)
     out1 = model_inference_full_img(model, flip1, softmax, args)
@@ -302,19 +294,18 @@ def apply_on_full_image(model, input_img, softmax, args):
     out4 = model_inference_full_img(model, flip4, softmax, args)
 
     out = (np.flipud(out1) + np.fliplr(out2) + np.flipud(np.fliplr(out3)) + np.fliplr(np.flipud(out4)))/4
-    # import pdb; pdb.set_trace()
     return out
 
 def model_inference_full_img(model, input_img, softmax, args):
+    '''
+    Instead of do inference on patch, inference on full image.
+    '''
     model.eval()
     input_img = np.expand_dims(input_img, axis=0)
     with torch.no_grad():
-        # if the image and trained model is 2D
-        # for deeplab################################
         input_img_stack = np.stack([input_img,input_img, input_img],axis=1)[0,...]
         input_img_tensor = torch.from_numpy(input_img_stack).float()
         tmp_out = model(Variable(input_img_tensor.cuda()).unsqueeze(0))
-        ###########################################################3
 
         prob = softmax(tmp_out)
         out_flat_tensor = prob.cpu().data.float()
