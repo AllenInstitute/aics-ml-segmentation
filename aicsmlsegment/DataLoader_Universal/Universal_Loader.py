@@ -67,6 +67,8 @@ class RR_FH_M0(Dataset):
             label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
             label = label_reader.data
             label = np.squeeze(label,axis=0) # 4-D after squeeze
+            while(len(label.shape) != 4): # when the image is larger than 4D keep reducing dimensions
+                label = np.squeeze(label,axis=0)
 
             # when the tif has only 1 channel, the loaded array may have falsely swaped dimensions (ZCYX). we want CZYX
             # (This may also happen in different OS or different package versions)
@@ -77,8 +79,11 @@ class RR_FH_M0(Dataset):
             input_reader = AICSImage(fn+'.ome.tif') #CZYX  #TODO: check size
             input_img = input_reader.data
             input_img = np.squeeze(input_img,axis=0)
+            while(len(input_img.shape) > 4): # when the image is larger than 4D keep reducing dimensions
+                input_img = np.squeeze(input_img,axis=0)
             if input_img.shape[1] < input_img.shape[0]:
                 input_img = np.transpose(input_img,(1,0,2,3))
+            
 
             costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
             costmap = costmap_reader.data
@@ -87,6 +92,13 @@ class RR_FH_M0(Dataset):
                 costmap = np.squeeze(costmap,axis=0)
             elif costmap.shape[1] == 1:
                 costmap = np.squeeze(costmap,axis=1)
+            
+            if costmap.shape[1] < costmap.shape[0]:
+                costmap = np.transpose(costmap,(1,0,2,3))
+                costmap = np.squeeze(costmap,axis=0)
+
+            while(len(costmap.shape) != 3): # when the image is larger than 3D keep reducing dimensions
+                costmap = np.squeeze(costmap,axis=0)
 
             img_pad0 = np.pad(input_img, ((0,0),(0,0),(padding[1],padding[1]),(padding[2],padding[2])), 'constant')
             raw = np.pad(img_pad0, ((0,0),(padding[0],padding[0]),(0,0),(0,0)), 'constant')

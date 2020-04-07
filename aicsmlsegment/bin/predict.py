@@ -114,7 +114,7 @@ def main():
                 if img.shape[1] < img.shape[0]:
                     img = np.transpose(img,(1,0,2,3))
                 img = img[config['InputCh'],:,:,:]
-                img = image_normalization(img, config['Normalization'])
+                # # img = image_normalization(img, config['Normalization'])
 
                 if len(config['ResizeRatio'])>0:
                     img = resize(img, (1, config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), method='cubic')
@@ -191,21 +191,40 @@ def main():
                 imsave(config['OutputDir'] + os.sep + pathlib.PurePosixPath(fn).stem +'_struct_segmentation.tiff',out)
                 print(f'Image {fn} has been segmented')
                 continue
+            
+            # when image size is larger
+            while len(img0.shape) > 5:
+                img0 = np.squeeze(img0, axis = 0)
 
             img = img0[0,:,:,:,:].astype(float)
             if img.shape[1] < img.shape[0]:
                 img = np.transpose(img,(1,0,2,3))
-            img = img[config['InputCh'],:,:,:]
-            img = image_normalization(img, config['Normalization'])
 
-            if len(config['ResizeRatio'])>0:
-                img = resize(img, (1, config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), method='cubic')
-                for ch_idx in range(img.shape[0]):
-                    struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
-                    struct_img = (struct_img - struct_img.min())/(struct_img.max() - struct_img.min())
-                    img[ch_idx,:,:,:] = struct_img
+            img = img[config['InputCh'],:,:,:]
+            
+            # quick fix for each structure dual normalization
+            # img = image_normalization(img, config['Normalization'])
+            img = simple_norm(img, 2, 8)
+
+            if len(img.shape) == 3:
+                img = np.expand_dims(img, axis=0)
+            
+            # img1 = simple_norm(img, 2,8)
+            # if len(img.shape) == 3:
+            #     img1 = np.expand_dims(img1, axis=0)
+
+            # import pdb; pdb.set_trace()
+            # img = np.stack([img[0,:,:,:], img1[0,:,:,:]],axis=0)
+
+            # if len(config['ResizeRatio'])>0:
+            #     img = resize(img, (1, config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), method='cubic')
+                # for ch_idx in range(img.shape[0]):
+                #     struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
+                #     struct_img = (struct_img - struct_img.min())/(struct_img.max() - struct_img.min())
+                #     img[ch_idx,:,:,:] = struct_img
 
             # apply the model
+            # import pdb; pdb.set_trace()
             output_img = apply_on_image(model, img, model.final_activation, args_inference)
 
             # extract the result and write the output

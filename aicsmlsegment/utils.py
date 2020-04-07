@@ -65,15 +65,19 @@ def background_sub(img, r):
 def input_normalization(img, args):
     if len(img.shape) == 2: # if Image is 2D
         nchannel = 1
-        imag2D = True
+        image2D = True
     else:
+        image2D = False
         nchannel = img.shape[0]
     args.Normalization = int(args.Normalization)
     for ch_idx in range(nchannel):
-        if imag2D:
+        if image2D:
             struct_img = img
         else:
-            struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
+            if len(img.shape) > 3:
+                struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
+            else:
+                struct_img =img
 
         if args.Normalization == 0: # min-max normalization
             struct_img = (struct_img - struct_img.min() + 1e-8)/(struct_img.max() - struct_img.min() + 1e-7)
@@ -139,6 +143,8 @@ def input_normalization(img, args):
             img[ch_idx,:,:,:] = struct_img[:,:,:]
         elif args.Normalization == 19: # 2D cardio
             img = simple_norm(struct_img, 1, 6)
+        elif args.Normalization == 20: # FBL
+            img = simple_norm(struct_img, 0.5, 18)
         else:
             print('no normalization recipe found')
             quit()
@@ -225,7 +231,13 @@ def compute_iou(prediction, gt, cmap):
     area_u = np.logical_or(prediction, gt)
     area_u[cmap==0]=False
 
-    return np.count_nonzero(area_i) / np.count_nonzero(area_u)
+    # when area_u is 0
+    bottom = np.count_nonzero(area_u)
+    if bottom == 0:
+        bottom = 0.000001
+
+
+    return np.count_nonzero(area_i) / bottom
 
 def get_logger(name, level=logging.INFO):
     logger = logging.getLogger(name)

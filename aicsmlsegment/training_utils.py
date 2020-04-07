@@ -259,10 +259,10 @@ class BasicFolderTrainer:
             quit()
 
         if loader_config['name']=='default':
-            from aicsmlsegment.DataLoader3D.Universal_Loader import RR_FH_M0 as train_loader
+            from aicsmlsegment.DataLoader_Universal.Universal_Loader import RR_FH_M0 as train_loader
             train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
         elif loader_config['name']=='focus':
-            from aicsmlsegment.DataLoader3D.Universal_Loader import RR_FH_M0C as train_loader
+            from aicsmlsegment.DataLoader_Universal.Universal_Loader import RR_FH_M0C as train_loader
             train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
         elif loader_config['name'] == '2d_loader':
             from aicsmlsegment.DataLoader_Universal.Universal_Loader import AUG_M_2D as train_loader
@@ -330,8 +330,10 @@ class BasicFolderTrainer:
 
             # validation
             if num_epoch % validation_config['validate_every_n_epoch'] ==0:
-                validation_loss = 0
-                # validation_loss = np.zeros((len(validation_config['OutputCh'])//2,))
+                if data_dim == 2:
+                    validation_loss = 0
+                else:
+                    validation_loss = np.zeros((len(validation_config['OutputCh'])//2,))
                 model.eval() 
                 # outputs_list = []
                 for img_idx, fn in enumerate(valid_filenames):
@@ -341,6 +343,8 @@ class BasicFolderTrainer:
                         label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
                         label = label_reader.data
                         label = np.squeeze(label,axis=0) # 4-D after squeeze
+                        while(len(label.shape) != 4): # when the image is larger than 4D keep reducing dimensions
+                            label = np.squeeze(label,axis=0)
 
                         # when the tif has only 1 channel, the loaded array may have falsely swaped dimensions (ZCYX). we want CZYX
                         # (This may also happen in different OS or different package versions)
@@ -352,8 +356,11 @@ class BasicFolderTrainer:
                         input_reader = AICSImage(fn+'.ome.tif') #CZYX  #TODO: check size
                         input_img = input_reader.data
                         input_img = np.squeeze(input_img,axis=0)
+                        while(len(input_img.shape) > 4): # when the image is larger than 4D keep reducing dimensions
+                            input_img = np.squeeze(input_img,axis=0)
                         if input_img.shape[1] < input_img.shape[0]:
                             input_img = np.transpose(input_img,(1,0,2,3))
+                        original_img = input_img
 
                         # cmap tensor
                         costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
@@ -363,6 +370,12 @@ class BasicFolderTrainer:
                             costmap = np.squeeze(costmap,axis=0)
                         elif costmap.shape[1] == 1:
                             costmap = np.squeeze(costmap,axis=1)
+                        if costmap.shape[1] < costmap.shape[0]:
+                            costmap = np.transpose(costmap,(1,0,2,3))
+                            costmap = np.squeeze(costmap,axis=0)
+
+                        while(len(costmap.shape) != 3): # when the image is larger than 3D keep reducing dimensions
+                            costmap = np.squeeze(costmap,axis=0)
 
                     else: # when data is 2D
                         # target
@@ -387,6 +400,7 @@ class BasicFolderTrainer:
                         # Normalize the img
                         input_img = simple_norm(input_img, 1, 6)
 
+
                         # cmap tensor
                         costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
                         costmap = costmap_reader.data
@@ -404,19 +418,19 @@ class BasicFolderTrainer:
                         output_img = outputs.astype(np.uint8)
                         output_img[output_img>0]=255
                         validation_loss += compute_iou(outputs, label[:,:]==validation_config['OutputCh'][1], costmap)
-
-                        if config['validation']['val_process']:
-                            save_validation_process(original_img, output_img, config['checkpoint_dir'], num_epoch)
-                    else:    
+                    else:
                         assert len(validation_config['OutputCh'])//2 == len(outputs)
+                        output_img = np.zeros(outputs[0].shape[1:])
                         for vi in range(len(outputs)):
                             if label.shape[0]==1: # the same label for all output
                                 validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[0,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
                             else:
                                 validation_loss[vi] += compute_iou(outputs[vi][0,:,:,:]>0.5, label[vi,:,:,:]==validation_config['OutputCh'][2*vi+1], costmap)
-                        
-                    
+                            output_img += outputs[vi][0,:,:,:]
+                        output_img = output_img > 0.5
 
+                if config['validation']['val_process']:
+                    save_validation_process(original_img, output_img.astype('uint8'), config['checkpoint_dir'], num_epoch)
 
                 
                 average_validation_loss = validation_loss / len(valid_filenames)

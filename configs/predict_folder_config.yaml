@@ -4,7 +4,7 @@
 model: 
   name: unet_xy
 # path to the trained model
-model_path: '/allen/aics/assay-dev/Segmentation/DeepLearning/for_april_2019_release/LMNB1_saved_model_iter_2/checkpoint_epoch_400.pytorch'
+model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_mitotic_diff_w/checkpoint_epoch_100.pytorch'
 # number of input channels to the model
 nchannel: 1
 # number of output channels
@@ -20,13 +20,13 @@ size_out: [60, 92, 92] # [30, 152, 152]
 # Data Info
 ##########################################################################################################
 # the path to output folder
-OutputDir: '/allen/aics/assay-dev/Segmentation/DeepLearning/for_april_2019_release/LMNB1_test/400'
+OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_mitotic_diff_w/test'
 # the index of the input channel
-InputCh: [0]
+InputCh: [3]
 # the ratio to resize the image
 ResizeRatio: [1.0, 1.0, 1.0]
 # the method to normalize your data
-Normalization: 10
+Normalization: 20
 # the threshold to be applied on your data
 Threshold: 0.5 #0.5 # 0.3
 # whether to use run time augmentation (may improve the accuracy, but takes much longer to run)
@@ -38,9 +38,9 @@ RuntimeAug: False
 mode:
   name: folder
   # paths to the file
-  InputDir: '/allen/aics/assay-dev/Segmentation/DeepLearning/for_april_2019_release/LMNB1_test'
+  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL'
   # the type of images to be processed in this folder
-  DataType: .tiff
+  DataType: .tiff #.czi
   
   
   

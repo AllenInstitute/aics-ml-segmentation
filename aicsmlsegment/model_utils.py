@@ -7,9 +7,9 @@ import os
 import shutil
 import sys
 
-from aicsmlsegment.utils import get_logger
+from aicsmlsegment.utils import get_logger, simple_norm
 
-SUPPORTED_MODELS = ['unet_xy_zoom', 'deeplabV3', 'deeplabV3_imagenet','deeplabV3plus', 'deeplabV3plus_imagenet']
+SUPPORTED_MODELS = ['unet_xy', 'unet_xy_zoom', 'deeplabV3', 'deeplabV3_imagenet','deeplabV3plus', 'deeplabV3plus_imagenet']
 
 def weights_init(m):
     classname = m.__class__.__name__
