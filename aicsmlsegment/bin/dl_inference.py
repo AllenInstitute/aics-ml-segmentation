@@ -21,7 +21,9 @@ def dl_inference(
     model_path = '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch',
     InputDir = '/allen/aics/assay-dev/computational/data/cardio_wga_2d/segmentations/raw',
     OutputDir = '/allen/aics/assay-dev/users/Hyeonwoo/scratch_data/cardio_seg_test',
-    DataType = '.tif'
+    DataType = '.tif',
+    option = 'folder',
+    img_array = None
 ):
 
     # model structure and input 
@@ -46,7 +48,7 @@ def dl_inference(
 
     # input setting (Folder)
     nested = {}
-    nested['name'] = 'folder'
+    nested['name'] = option # it can be 'folder' or 'array'
     nested['DataType'] = DataType
     nested['InputDir'] = InputDir # paths to the file
     nested['timelapse'] = False # is this file a timelapse image
@@ -287,3 +289,33 @@ def dl_inference(
                     imsave(config['OutputDir'] + os.sep + pathlib.PurePosixPath(fn).stem + '_seg_'+ str(config['OutputCh'][2*ch_idx])+'.ome.tif', out)
             
             print(f'Image {fn} has been segmented')
+
+    elif inf_config['name'] == 'array' and img_array is not None:
+
+        img0 = img_array
+        # If the model is 2D model run this script. This is for temp
+        if len(config['nclass']) == 1:
+            if len(img0.shape) != 2:
+                print("check image size, array should be 2D")
+            img = image_normalization(img, config['Normalization'])
+            print(f'processing one image of size {img.shape}')
+            
+            # for full size testing
+            if config['mode']['apply_on_full_image']:
+                output_img = apply_on_full_image(model, img, model.final_activation, args_inference)
+
+            else:
+                output_img = model_inference(model, img, model.final_activation, args_inference)
+
+            out = output_img[:,:,1] > config['Threshold']
+            out = out.astype(np.uint8)
+            out[out>0]=255
+            if config["mode"]["post_process"]:
+                out = post_processing_2d(out).astype('uint8')
+            else:
+                out.astype('uint8')
+            # imsave(config['OutputDir'] + os.sep + pathlib.PurePosixPath(fn).stem +'_struct_segmentation.tiff',out)
+            print('Image has been segmented')
+            return out
+        else:
+            print("only 2D is supported")
