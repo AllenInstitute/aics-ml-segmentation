@@ -20,7 +20,7 @@ size_out: [0]
 # Data Info
 ##########################################################################################################
 # the path to output folder
-OutputDir: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/segmentations/seg'
+OutputDir: '/allen/aics/assay-dev/users/Hyeonwoo/scratch_data/cardio_seg_test'
 # the index of the input channel
 InputCh: [1]
 # the method to normalize your data
