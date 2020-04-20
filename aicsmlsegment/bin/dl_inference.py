@@ -297,7 +297,8 @@ def dl_inference(
         if len(config['nclass']) == 1:
             if len(img0.shape) != 2:
                 print("check image size, array should be 2D")
-            img = image_normalization(img, config['Normalization'])
+                exit(0)
+            img = image_normalization(img0, config['Normalization'])
             print(f'processing one image of size {img.shape}')
             
             # for full size testing
