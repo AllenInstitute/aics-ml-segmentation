@@ -226,7 +226,6 @@ def main():
             # apply the model
             # import pdb; pdb.set_trace()
             output_img = apply_on_image(model, img, model.final_activation, args_inference)
-            import pdb; pdb.set_trace()
 
             # extract the result and write the output
             if len(config['OutputCh'])==2:
