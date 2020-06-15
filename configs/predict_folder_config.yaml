@@ -4,7 +4,7 @@
 model: 
   name: unet_xy
 # path to the trained model
-model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_mitotic_diff_w/checkpoint_epoch_100.pytorch'
+model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_norm1_3/checkpoint_epoch_1400.pytorch'
 # number of input channels to the model
 nchannel: 1
 # number of output channels
@@ -20,9 +20,9 @@ size_out: [60, 92, 92] # [30, 152, 152]
 # Data Info
 ##########################################################################################################
 # the path to output folder
-OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_mitotic_diff_w/test'
+OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_norm1_3/test_on_train_1400'
 # the index of the input channel
-InputCh: [3]
+InputCh: [0] # it was 3 before
 # the ratio to resize the image
 ResizeRatio: [1.0, 1.0, 1.0]
 # the method to normalize your data
@@ -38,9 +38,10 @@ RuntimeAug: False
 mode:
   name: folder
   # paths to the file
-  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL'
+  # InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL'
+  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/trainset/FBL_norm1/train_test'
   # the type of images to be processed in this folder
-  DataType: .tiff #.czi
+  DataType: .tif #.czi
   
   
   

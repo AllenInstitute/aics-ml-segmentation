@@ -2,7 +2,7 @@
 # model settings
 ##########################################################################################################
 model: 
-  name: deeplabV3plus 
+  name: deeplabV3plus_imagenet 
 # number of input channels to the model
 nchannel: 1
 # number of output channels, 
@@ -12,20 +12,21 @@ size_in: [512, 512]
 # prediction patch size from the network (change according to input size)
 size_out: [512, 512] 
 # path to save the checkpoint
-checkpoint_dir: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/aics-ml-segmentation/aicsmlsegment/deeplab/deeplabV3plus_cont'
+checkpoint_dir: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/cardio_2D_seg'
 
 # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-# resume: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/aics-ml-segmentation/aicsmlsegment/deeplab/deeplabV3plus/checkpoint_epoch_375.pytorch'
+resume: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch'
+# resume:
 
 ##########################################################################################################
 # training precedure setting
 ##########################################################################################################
 # initial learning rate
-learning_rate: 0.000001 # 0.000001
+learning_rate: 0.00001 # 0.000001
 # weight decay
 weight_decay: 0.005
 # max number of epochs
-epochs: 1000
+epochs: 3000
 # number of epoch to save the model
 save_every_n_epoch: 25
 # loss function configuration
@@ -43,13 +44,13 @@ loss:
 loader:
   name: 2d_loader
   # paths to the training datasets
-  datafolder: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/annotation_examples/train_all'
+  datafolder: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/annotation_examples/seg_pipeline6_others/trainset/train_combined'
   # number of batch in each training iteration (related to patch size and GPU memory)
   batch_size: 8
   # number of patches loaded to cache 
-  PatchPerBuffer: 30
+  PatchPerBuffer: 80
   # number of epoches for every time the patches in cache are cleared and resampled (smaller = heavier i/o, larger = higher chance of overfitting)
-  epoch_shuffle: 5
+  epoch_shuffle: 5 # 5
   # number of workers for loading data in each training iteration
   NumWorkers: 4
 

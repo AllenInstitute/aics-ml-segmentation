@@ -1,0 +1,47 @@
+##########################################################################################################
+# model settings
+##########################################################################################################
+model: 
+  name: unet_xy
+# path to the trained model
+model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/FBL_norm1_3/checkpoint_epoch_1400.pytorch'
+# number of input channels to the model
+nchannel: 1
+# number of output channels
+nclass: [2,2,2]
+# the channel to extract from output tensors
+OutputCh: [0, 1]
+# input patch size given to the network (adapt to fit in your GPU memory, generally bigger patches are better)
+size_in: [88, 180, 180] #[62, 420, 420]
+# prediction patch size from the network (change according to input size)
+size_out: [60, 92, 92] # [30, 152, 152]
+
+##########################################################################################################
+# Data Info
+##########################################################################################################
+# the path to output folder
+OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL4slide/full'
+# the index of the input channel
+InputCh: [0] # it was 3 before
+# the ratio to resize the image
+ResizeRatio: [1.0, 1.0, 1.0]
+# the method to normalize your data
+Normalization: 20
+# the threshold to be applied on your data
+Threshold: 0.2 #0.5 # 0.3
+# whether to use run time augmentation (may improve the accuracy, but takes much longer to run)
+RuntimeAug: False
+
+##########################################################################################################
+# Execution mode: all files of specific type within a directory
+##########################################################################################################
+mode:
+  name: folder
+  # paths to the file
+  # InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL'
+  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL4slide/full'
+  # the type of images to be processed in this folder
+  DataType: .tif #.czi
+  
+  
+  

@@ -118,7 +118,7 @@ def input_normalization(img, args):
             #struct_img = simple_norm(struct_img, 2.5, 10)
             img[ch_idx,:,:,:] = struct_img[:,:,:]
         elif args.Normalization == 13: # cellmask
-            struct_img[struct_img>10000] = struct_img.min()
+            # struct_img[struct_img>10000] = struct_img.min()
             struct_img = background_sub(struct_img,50)
             struct_img = simple_norm(struct_img, 2, 11)
             img[ch_idx,:,:,:] = struct_img[:,:,:]
@@ -257,11 +257,11 @@ def post_processing_2d(img):
     '''
     ball_mat_open = ball_matrix(5)
     ball_mat_hole = ball_matrix(5)
-    ball_mat_dilation = ball_matrix(8)
+    ball_mat_dilation = ball_matrix(5)
     ball_mat_erosion = ball_matrix(5)
 
     processed_img = binary_opening(img, structure=ball_mat_open).astype(np.int)
-    processed_img = binary_dilation(processed_img, structure=ball_matrix(2),iterations=2)
+    processed_img = binary_erosion(img, structure=ball_matrix(4),iterations=2)
 
     object_mat = label(processed_img) # object detection
 
@@ -269,9 +269,12 @@ def post_processing_2d(img):
     final_seg = np.zeros(processed_img.shape)
     for individual_label in np.unique(object_mat):
         temp = (object_mat==individual_label)*1
-        temp = binary_dilation(temp, structure=ball_mat_dilation)
-        temp = binary_erosion(temp, structure=ball_mat_erosion)
-        temp = remove_small_holes(temp, area_threshold=700)*1
+        if np.sum(temp) < 3000:
+            temp *= 0
+        else:
+            temp = binary_opening(temp, structure=ball_matrix(3))
+            temp = binary_dilation(temp, structure=ball_mat_dilation,iterations=3)
+            temp = remove_small_holes(temp, area_threshold=1200)*1
 
         final_seg[temp == 1] = individual_label
     return final_seg

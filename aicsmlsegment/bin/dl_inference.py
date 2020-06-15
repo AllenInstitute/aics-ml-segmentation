@@ -19,9 +19,10 @@ from aicsmlsegment.model_utils import build_model, load_checkpoint, model_infere
 def dl_inference(
     model_name = 'deeplabV3plus',
     model_path = '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch',
-    InputDir = '/allen/aics/assay-dev/computational/data/cardio_wga_2d/segmentations/raw',
-    OutputDir = '/allen/aics/assay-dev/users/Hyeonwoo/scratch_data/cardio_seg_test',
-    DataType = '.tif',
+    InputDir = '/allen/aics/microscopy/PRODUCTION/PIPELINE_6/5500000120/3i1/63X_zstacks',
+    OutputDir = '/allen/aics/assay-dev/computational/data/cardio_wga_2d/seg_pipe6_5500000120',
+    DataType = 'C0.tif',
+    max_proj = True,
     option = 'folder',
     img_array = None
 ):
@@ -202,10 +203,14 @@ def dl_inference(
 
             # If the model is 2D model run this script. This is for temp
             if len(config['nclass']) == 1:
-                if img0.shape[3] == 1: # when it is single channel
-                    img = img0[0,0,0,0,:,:]
+                if max_proj:
+                    img_3d = img0[0,0,0,:,:,:]
+                    img = np.amax(img_3d, axis=0)
                 else:
-                    img = img0[0,0,0,config['InputCh'][0],:,:]
+                    if img0.shape[3] == 1: # when it is single channel
+                        img = img0[0,0,0,0,:,:]
+                    else:
+                        img = img0[0,0,0,config['InputCh'][0],:,:]
                 img = image_normalization(img, config['Normalization'])
                 print(f'processing one image of size {img.shape}')
                 
@@ -320,3 +325,7 @@ def dl_inference(
             return out
         else:
             print("only 2D is supported")
+
+
+if __name__ == "__main__":
+    dl_inference()

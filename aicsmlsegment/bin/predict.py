@@ -204,7 +204,7 @@ def main():
             
             # quick fix for each structure dual normalization
             # img = image_normalization(img, config['Normalization'])
-            img = simple_norm(img, 2, 8)
+            # img = simple_norm(img, 2, 8) # normalization is silenced for now because training data is already normalized
 
             if len(img.shape) == 3:
                 img = np.expand_dims(img, axis=0)
@@ -226,6 +226,7 @@ def main():
             # apply the model
             # import pdb; pdb.set_trace()
             output_img = apply_on_image(model, img, model.final_activation, args_inference)
+            import pdb; pdb.set_trace()
 
             # extract the result and write the output
             if len(config['OutputCh'])==2:
@@ -237,9 +238,11 @@ def main():
                     out = out.astype(np.float32)
                     out = (out - out.min()) / (out.max()-out.min())
                 else:
-                    out = remove_small_objects(output_img[0] > config['Threshold'], min_size=2, connectivity=1) 
-                    out = out.astype(np.uint8)
-                    out[out>0]=255
+                    # out = remove_small_objects(output_img[0] > config['Threshold'], min_size=2, connectivity=1) 
+                    # out = out.astype(np.uint8)
+                    # out[out>0]=255
+                    out = output_img[0].astype(np.float32)
+                    print('here')
                 imsave(config['OutputDir'] + os.sep + pathlib.PurePosixPath(fn).stem + '_struct_segmentation.tiff', out)
             else:
                 for ch_idx in range(len(config['OutputCh'])//2):

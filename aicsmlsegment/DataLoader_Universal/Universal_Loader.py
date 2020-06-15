@@ -100,6 +100,12 @@ class RR_FH_M0(Dataset):
             while(len(costmap.shape) != 3): # when the image is larger than 3D keep reducing dimensions
                 costmap = np.squeeze(costmap,axis=0)
 
+            # '''
+            # This part skips when costmap is empty
+            # '''
+            # if np.sum(costmap) == 0:
+            #     continue
+
             img_pad0 = np.pad(input_img, ((0,0),(0,0),(padding[1],padding[1]),(padding[2],padding[2])), 'constant')
             raw = np.pad(img_pad0, ((0,0),(padding[0],padding[0]),(0,0),(0,0)), 'constant')
 
@@ -293,7 +299,6 @@ class RR_FH_M0C(Dataset):
                         if num_fail > 50:
                             break
                         continue
-                    
 
                     # confirmed good crop
                     (self.img).append(raw[:,pz:pz+size_in[0],py:py+size_in[1],px:px+size_in[2]] )
@@ -436,6 +441,10 @@ class AUG_M_2D(Dataset):
             
             label_reader = AICSImage(fn+'_GT.ome.tif')
             label = label_reader.data
+            # if the label is in RGB
+            if label.shape[-1] < label.shape[-3]:
+                label = np.swapaxes(label, -3, -1)
+                label = np.swapaxes(label, -2, -1)
             label = label[0,0,0,0,:,:]
 
             # if label is other than [0,1], change it to [0,1]
@@ -457,6 +466,9 @@ class AUG_M_2D(Dataset):
             
             costmap_reader = AICSImage(fn+'_CM.ome.tif')
             costmap = costmap_reader.data
+            # if the costmap is in RGB
+            if costmap.shape[-1] < costmap.shape[-3]:
+                costmap = np.swapaxes(costmap, -3, -1)
             costmap = costmap[0,0,0,0,:,:]
 
             # concatenate raw, label ,and costmap before spliting into patches
@@ -490,16 +502,28 @@ class AUG_M_2D(Dataset):
                     image_aug = input_img[patches,:,:]
                     label_aug = label[patches,:,:]
                     cmap_aug = costmap[patches,:,:]
+                
+                # randomly choose to apply spatial data augmentation 
+                sda = np.random.randint(2, dtype='bool')
+                if sda:
+                    random_aug = self.spatial_data_augmentation(image_aug.astype(float), label_aug.astype(float), cmap_aug.astype(float), size_in)
 
-                random_aug = self.spatial_data_augmentation(image_aug.astype(float), label_aug.astype(float), cmap_aug.astype(float), size_in)
+                    augmented_img = random_aug[0][0,:,:,:]
+                    augmented_gt = random_aug[1][0,:,:,:]
+                    augmented_cmap = random_aug[2][0,:,:,:]
 
-                augmented_img = random_aug[0][0,:,:,:]
-                augmented_gt = random_aug[1][0,:,:,:]
-                augmented_cmap = random_aug[2][0,:,:,:]
+                    (self.img).append(augmented_img)
+                    (self.gt).append(augmented_gt)
+                    (self.cmap).append(augmented_cmap)
+                
+                else:
+                    augmented_img = np.stack([image_aug,image_aug,image_aug], axis=0)
+                    augmented_gt = np.stack([label_aug], axis=0)
+                    augmented_cmap = np.stack([cmap_aug], axis=0)
 
-                (self.img).append(augmented_img)
-                (self.gt).append(augmented_gt)
-                (self.cmap).append(augmented_cmap)
+                    (self.img).append(from_numpy(augmented_img.astype(float)))
+                    (self.gt).append(from_numpy(augmented_gt.astype(float)))
+                    (self.cmap).append(from_numpy(augmented_cmap.astype(float)))
               
     def __getitem__(self, index):
 

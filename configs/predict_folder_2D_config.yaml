@@ -4,7 +4,8 @@
 model: 
   name: deeplabV3plus # not deeplabv3_imagenet since it will load weight from our trained network
 # path to the trained model
-model_path: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch'
+# model_path: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/deeplab/deeplabV3plus_cont/checkpoint_epoch_125.pytorch'
+model_path: '/allen/aics/assay-dev/users/Hyeonwoo/code/develop/trained_models/cardio_2D_seg/checkpoint_epoch_100.pytorch'
 # number of input channels to the model
 nchannel: 1
 # number of output channels
@@ -20,7 +21,7 @@ size_out: [0]
 # Data Info
 ##########################################################################################################
 # the path to output folder
-OutputDir: '/allen/aics/assay-dev/users/Hyeonwoo/scratch_data/cardio_seg_test'
+OutputDir: '/allen/aics/assay-dev/users/Hyeonwoo/scratch_data/cardio_seg_test/instance'
 # the index of the input channel
 InputCh: [1]
 # the method to normalize your data
@@ -37,7 +38,7 @@ mode:
   name: folder # change to file if single file test is wanted
   DataType: .tif
   # paths to the file
-  InputDir: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/segmentations/raw'
+  InputDir: '/allen/aics/assay-dev/computational/data/cardio_wga_2d/annotation_examples/seg_pipeline6_others/trainset/validation/raw'
   # is this file a timelapse image
   timelapse: False
   # whether apply on full image or not

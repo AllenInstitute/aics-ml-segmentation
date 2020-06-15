@@ -198,7 +198,6 @@ class BasicFolderTrainer:
         ### load settings ###
         config = self.config #TODO, fix this
         model = self.model
-        # model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=False, progress=True, num_classes=2, aux_loss=None).cuda() # using deeplabv3
 
         # define loss 
         #TODO, add more loss
