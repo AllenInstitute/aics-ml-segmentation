@@ -4,7 +4,7 @@
 model: 
   name: unet_xy
 # path to the trained model
-model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/NPM1_norm1_small/checkpoint_epoch_200.pytorch'
+model_path: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/NPM1_norm1_1/checkpoint_epoch_750.pytorch'
 # number of input channels to the model
 nchannel: 1
 # number of output channels
@@ -20,15 +20,15 @@ size_out: [60, 92, 92] # [30, 152, 152]
 # Data Info
 ##########################################################################################################
 # the path to output folder
-OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/model/NPM1_norm1_small/test_on_train_200'
+OutputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/NPM1_valid_750'
 # the index of the input channel
-InputCh: [0] # it was 3 before
+InputCh: [3] # it was 3 before
 # the ratio to resize the image
 ResizeRatio: [1.0, 1.0, 1.0]
 # the method to normalize your data
-Normalization: 20
+Normalization: 21
 # the threshold to be applied on your data
-Threshold: 0.5 #0.5 # 0.3
+Threshold: 0.85 #0.5 # 0.3
 # whether to use run time augmentation (may improve the accuracy, but takes much longer to run)
 RuntimeAug: False
 
@@ -38,10 +38,10 @@ RuntimeAug: False
 mode:
   name: folder
   # paths to the file
-  # InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/FBL'
-  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/trainset/NPM1_norm1/trainset_small'
+  # InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/trainset/NPM1_norm1/train_test'
+  InputDir: '/allen/aics/assay-dev/computational/data/Nucleus_structure_segmentation/testset/NPM1'
   # the type of images to be processed in this folder
-  DataType: .tif #.czi
+  DataType: .tiff #.czi
   
   
   

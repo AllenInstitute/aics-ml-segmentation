@@ -216,12 +216,17 @@ def main():
             # import pdb; pdb.set_trace()
             # img = np.stack([img[0,:,:,:], img1[0,:,:,:]],axis=0)
 
-            # if len(config['ResizeRatio'])>0:
-            #     img = resize(img, (1, config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), method='cubic')
+            if len(config['ResizeRatio'])>0:
+                img = resize(img, (1, config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), method='cubic')
                 # for ch_idx in range(img.shape[0]):
                 #     struct_img = img[ch_idx,:,:,:] # note that struct_img is only a view of img, so changes made on struct_img also affects img
                 #     struct_img = (struct_img - struct_img.min())/(struct_img.max() - struct_img.min())
                 #     img[ch_idx,:,:,:] = struct_img
+            img = image_normalization(img, config['Normalization'])
+            # img = simple_norm(img, 0.5, 18) # normalization is silenced for now because training data is already normalized
+            if len(img.shape) == 3:
+                img = np.expand_dims(img, axis=0)
+         
 
             # apply the model
             # import pdb; pdb.set_trace()
@@ -237,11 +242,11 @@ def main():
                     out = out.astype(np.float32)
                     out = (out - out.min()) / (out.max()-out.min())
                 else:
-                    # out = remove_small_objects(output_img[0] > config['Threshold'], min_size=2, connectivity=1) 
-                    # out = out.astype(np.uint8)
-                    # out[out>0]=255
-                    out = output_img[0].astype(np.float32)
-                    print('here')
+                    # import pdb; pdb.set_trace()
+                    out = remove_small_objects(output_img[0] > config['Threshold'], min_size=2, connectivity=1) 
+                    out = out.astype(np.uint8)
+                    out[out>0]=255
+                    # out = output_img[0].astype(np.float32)
                 imsave(config['OutputDir'] + os.sep + pathlib.PurePosixPath(fn).stem + '_struct_segmentation.tiff', out)
             else:
                 for ch_idx in range(len(config['OutputCh'])//2):

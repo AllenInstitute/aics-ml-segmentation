@@ -143,8 +143,10 @@ def input_normalization(img, args):
             img[ch_idx,:,:,:] = struct_img[:,:,:]
         elif args.Normalization == 19: # 2D cardio
             img = simple_norm(struct_img, 1, 6)
-        elif args.Normalization == 20: # FBL
+        elif args.Normalization == 20: # nucleolus segmentaion (FBL combined)
             img = simple_norm(struct_img, 0.5, 18)
+        elif args.Normalization == 21: # nucleolus segmentaion (NPM1 combined)
+            img = simple_norm(struct_img, 0.5, 15)
         else:
             print('no normalization recipe found')
             quit()
