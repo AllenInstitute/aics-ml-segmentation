@@ -57,12 +57,17 @@ class RR_FH_M0(Dataset):
 
             label_reader = AICSImage(fn+'_GT.ome.tif')
             label = label_reader.get_image_data("CZYX", S=0, T=0)
+            label = np.squeeze(label)
+            label = np.expand_dims(label, axis=0)
 
             input_reader = AICSImage(fn+'.ome.tif')
             input_img = input_reader.get_image_data("CZYX", S=0, T=0)
+            input_img = np.squeeze(input_img)
+            input_img = np.expand_dims(input_img, axis=0)
 
             costmap_reader = AICSImage(fn+'_CM.ome.tif')
-            costmap = costmap_reader.get_image_data("ZYX", S=0, T=0, C=0)
+            costmap = costmap_reader.get_image_data("CZYX", S=0, T=0)
+            costmap = np.squeeze(costmap)
 
             img_pad0 = np.pad(input_img, ((0,0),(0,0),(padding[1],padding[1]),(padding[2],padding[2])), 'constant')
             raw = np.pad(img_pad0, ((0,0),(padding[0],padding[0]),(0,0),(0,0)), 'constant')
@@ -105,7 +110,6 @@ class RR_FH_M0(Dataset):
             new_patch_num = 0
             
             while new_patch_num < num_patch_per_img[img_idx]:
-                
                 pz = random.randint(0, label.shape[1] - size_out[0])
                 py = random.randint(0, label.shape[2] - size_out[1])
                 px = random.randint(0, label.shape[3] - size_out[2])
@@ -134,6 +138,96 @@ class RR_FH_M0(Dataset):
             label_tensor.append(from_numpy(self.gt[index].astype(float)).float())
 
         return image_tensor.float(), label_tensor, cmap_tensor.float()
+
+    def __len__(self):
+        return len(self.img)
+
+class RR_FH(Dataset):
+
+    def __init__(self, filenames, num_patch, size_in, size_out):
+
+        self.img = []
+        self.gt = []
+
+        padding = [(x-y)//2 for x,y in zip(size_in, size_out)]
+        total_in_count = size_in[0] * size_in[1] * size_in[2]
+        total_out_count = size_out[0] * size_out[1] * size_out[2]
+
+        num_data = len(filenames)
+        shuffle(filenames)
+        num_patch_per_img = np.zeros((num_data,), dtype=int)
+        if num_data >= num_patch:
+            # all one
+            num_patch_per_img[:num_patch]=1
+        else: 
+            basic_num = num_patch // num_data
+            # assign each image the same number of patches to extract
+            num_patch_per_img[:] = basic_num
+
+            # assign one more patch to the first few images to achieve the total patch number
+            num_patch_per_img[:(num_patch-basic_num*num_data)] = num_patch_per_img[:(num_patch-basic_num*num_data)] + 1
+
+        for img_idx, fn in enumerate(filenames):
+
+            if len(self.img)==num_patch:
+                break
+
+            label_reader = AICSImage(fn+'_GT.ome.tif')
+            label = label_reader.get_image_data("CZYX", S=0, T=0)
+
+            input_reader = AICSImage(fn+'.ome.tif')
+            input_img = input_reader.get_image_data("CZYX", S=0, T=0)
+
+            img_pad0 = np.pad(input_img, ((0,0),(0,0),(padding[1],padding[1]),(padding[2],padding[2])), 'constant')
+            raw = np.pad(img_pad0, ((0,0),(padding[0],padding[0]),(0,0),(0,0)), 'constant')
+
+            deg = random.randrange(1,180)
+            flip_flag = random.random()
+
+            for zz in range(label.shape[1]):
+                for ci in range(label.shape[0]):
+                    labi = label[ci,zz,:,:]
+                    labi_pil = Image.fromarray(np.uint8(labi*255))
+                    new_labi_pil = labi_pil.rotate(deg,resample=Image.NEAREST)
+                    if flip_flag<0.5:
+                        new_labi_pil = new_labi_pil.transpose(Image.FLIP_LEFT_RIGHT)
+                    new_labi = np.array(new_labi_pil.convert('L'))
+                    label[ci,zz,:,:] = (new_labi.astype(float))/255.0
+
+            for zz in range(raw.shape[1]):
+                for ci in range(raw.shape[0]):
+                    str_im = raw[ci,zz,:,:]
+                    str_im_pil = Image.fromarray(np.uint8(str_im*255))
+                    new_str_im_pil = str_im_pil.rotate(deg,resample=Image.BICUBIC)
+                    if flip_flag<0.5:
+                        new_str_im_pil = new_str_im_pil.transpose(Image.FLIP_LEFT_RIGHT)
+                    new_str_image = np.array(new_str_im_pil.convert('L'))
+                    raw[ci,zz,:,:] = (new_str_image.astype(float))/255.0 
+            new_patch_num = 0
+            
+            while new_patch_num < num_patch_per_img[img_idx]:
+                
+                pz = random.randint(0, label.shape[1] - size_out[0])
+                py = random.randint(0, label.shape[2] - size_out[1])
+                px = random.randint(0, label.shape[3] - size_out[2])
+
+                # confirmed good crop
+                (self.img).append(raw[:,pz:pz+size_in[0],py:py+size_in[1],px:px+size_in[2]] )
+                (self.gt).append(label[:,pz:pz+size_out[0],py:py+size_out[1],px:px+size_out[2]])
+
+                new_patch_num += 1
+
+    def __getitem__(self, index):
+
+        image_tensor = from_numpy(self.img[index].astype(float))
+        label_tensor = []
+        if self.gt[index].shape[0]>0:
+            for zz in range(self.gt[index].shape[0]):
+                label_tensor.append(from_numpy(self.gt[index][zz,:,:,:].astype(float)).float())
+        else: 
+            label_tensor.append(from_numpy(self.gt[index].astype(float)).float())
+
+        return image_tensor.float(), label_tensor
 
     def __len__(self):
         return len(self.img)

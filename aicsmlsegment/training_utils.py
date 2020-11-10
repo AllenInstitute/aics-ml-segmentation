@@ -14,6 +14,7 @@ import importlib
 import random 
 from glob import glob
 from tqdm import tqdm
+from torch.nn import MSELoss
 
 from aicsimageio import AICSImage
 
@@ -22,7 +23,7 @@ from aicsmlsegment.custom_metrics import DiceCoefficient, MeanIoU, AveragePrecis
 from aicsmlsegment.model_utils import load_checkpoint, save_checkpoint, model_inference
 from aicsmlsegment.utils import compute_iou, get_logger, load_single_image, input_normalization
 
-SUPPORTED_LOSSES = ['Aux'] 
+SUPPORTED_LOSSES = ['Aux', 'MSE'] 
 
 def build_optimizer(config, model):
     learning_rate = config['learning_rate']
@@ -46,6 +47,8 @@ def get_loss_criterion(config):
     #TODO: add more loss functions
     if name == 'Aux':
         return MultiAuxillaryElementNLLLoss(3, loss_config['loss_weight'],  config['nclass'])
+    elif name == 'MSE':
+        return MSELoss()
 
 
 def get_train_dataloader(config):
@@ -178,6 +181,9 @@ class BasicFolderTrainer:
         elif loader_config['name']=='focus':
             from aicsmlsegment.DataLoader3D.Universal_Loader import RR_FH_M0C as train_loader
             train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
+        elif loader_config['name']=='basic':
+            from aicsmlsegment.DataLoader3D.Universal_Loader import RR_FH as train_loader
+            train_set_loader = DataLoader(train_loader(train_filenames, loader_config['PatchPerBuffer'], config['size_in'], config['size_out']), num_workers=loader_config['NumWorkers'], batch_size=loader_config['batch_size'], shuffle=True)
         else:
             print('other loader not support yet')
             quit()
@@ -204,7 +210,6 @@ class BasicFolderTrainer:
             epoch_loss = []
 
             for i, current_batch in tqdm(enumerate(train_set_loader)):
-                    
                 inputs = Variable(current_batch[0].cuda())
                 targets = current_batch[1]
                 outputs = model(inputs)
@@ -239,19 +244,23 @@ class BasicFolderTrainer:
 
                     # target 
                     label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
-                    label = label_reader.get_image_data('CZYX', S=0, T=0, C=[0]) # need 4D output
+                    label = label_reader.get_image_data('CZYX', S=0, T=0)
+                    label = np.squeeze(label)
+                    label = np.expand_dims(label, axis=0)
 
                     # input image
                     input_reader = AICSImage(fn+'.ome.tif')
-                    input_img = input_reader.get_image_data('CZYX', S=0, T=0, C=[0])  # need 4D output
+                    input_img = input_reader.get_image_data('CZYX', S=0, T=0)
+                    input_img = np.squeeze(input_img)
+                    input_img = np.expand_dims(input_img, axis=0)
 
                     # cmap tensor
                     costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
-                    costmap = costmap_reader.get_image_data('CZYX', S=0, T=0, C=[0])  # need 4D output
+                    costmap = costmap_reader.get_image_data('CZYX', S=0, T=0)
+                    costmap = np.squeeze(costmap)
 
                     # output 
                     outputs = model_inference(model, input_img, model.final_activation, args_inference)
-                    
                     assert len(validation_config['OutputCh'])//2 == len(outputs)
 
                     for vi in range(len(outputs)):
