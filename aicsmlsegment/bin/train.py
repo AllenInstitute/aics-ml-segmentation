@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 
-import sys
 import argparse
-import logging
-import traceback
 
 from aicsmlsegment.utils import load_config
-
-from aicsmlsegment.training_utils import BasicFolderTrainer, get_loss_criterion, build_optimizer, get_train_dataloader
+from aicsmlsegment.training_utils import BasicFolderTrainer
 from aicsmlsegment.utils import get_logger
 from aicsmlsegment.model_utils import get_number_of_learnable_parameters, build_model, load_checkpoint
 
@@ -23,7 +19,7 @@ def main():
     config = load_config(args.config)
     logger.info(config)
 
-    # Create model  
+    # Create model
     model = build_model(config)
 
     # Log the number of learnable parameters
@@ -39,6 +35,7 @@ def main():
     # run the training
     trainer = BasicFolderTrainer(model, config, logger=logger)
     trainer.train()
+
 
 if __name__ == '__main__':
     main()

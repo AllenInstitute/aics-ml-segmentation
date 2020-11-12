@@ -86,7 +86,6 @@ class UNet3D(nn.Module):
         return layer
 
     def forward(self, x):
-
         down1 = self.ec1(x)
         x1 = self.pool1(down1)
         down2 = self.ec2(x1)
@@ -95,7 +94,6 @@ class UNet3D(nn.Module):
         x3 = self.pool3(down3)
 
         u3 = self.ec4(x3)
-
         d3 = torch.cat((self.up3(u3), F.pad(down3,(-4,-4,-4,-4,-2,-2))), 1)
         u2 = self.dc3(d3)
 
@@ -109,7 +107,7 @@ class UNet3D(nn.Module):
 
         p1a = F.pad(self.predict1a(self.conv1a(self.up1a(u1))),(-2,-2,-2,-2, -1, -1))
         p2a = F.pad(self.predict2a(self.conv2a(self.up2a(u2))),(-7,-7,-7,-7,-3,-3))
-     
+
         p0_final = p0.permute(0, 2, 3, 4, 1).contiguous() # move the class channel to the last dimension
         p0_final = p0_final.view(p0_final.numel() // self.numClass, self.numClass)
         p0_final = self.softmax(p0_final, dim=1)

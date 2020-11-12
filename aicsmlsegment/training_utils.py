@@ -86,6 +86,7 @@ def shuffle_split_filenames(datafolder, leaveout):
 
     return train_filenames, valid_filenames
 
+
 class BasicFolderTrainer:
     """basic version of trainer.
     Args:
@@ -204,15 +205,15 @@ class BasicFolderTrainer:
             epoch_loss = []
 
             for i, current_batch in tqdm(enumerate(train_set_loader)):
-                    
+
                 inputs = Variable(current_batch[0].cuda())
                 targets = current_batch[1]
                 outputs = model(inputs)
 
-                if len(targets)>1:
+                if len(targets) > 1:
                     for zidx in range(len(targets)):
                         targets[zidx] = Variable(targets[zidx].cuda())
-                else: 
+                else:
                     targets = Variable(targets[0].cuda())
 
                 optimizer.zero_grad()
@@ -220,7 +221,7 @@ class BasicFolderTrainer:
                     cmap = Variable(current_batch[2].cuda())
                     loss = criterion(outputs, targets, cmap)
                 else: # input + target
-                    loss = criterion(outputs,targets)
+                    loss = criterion(outputs, targets)
                     
                 loss.backward()
                 optimizer.step()
@@ -233,25 +234,30 @@ class BasicFolderTrainer:
             # validation
             if num_epoch % validation_config['validate_every_n_epoch'] ==0:
                 validation_loss = np.zeros((len(validation_config['OutputCh'])//2,))
-                model.eval() 
+                model.eval()
 
                 for img_idx, fn in enumerate(valid_filenames):
 
-                    # target 
-                    label_reader = AICSImage(fn+'_GT.ome.tif')  #CZYX
-                    label = label_reader.get_image_data('CZYX', S=0, T=0, C=[0]) # need 4D output
+                    # target
+                    label_reader = AICSImage(fn+'_GT.ome.tif')
+                    label = label_reader.get_image_data('CZYX', S=0, T=0)  # need 4D output
+                    label = np.squeeze(label)
+                    label = np.expand_dims(label, axis=0)
 
                     # input image
                     input_reader = AICSImage(fn+'.ome.tif')
-                    input_img = input_reader.get_image_data('CZYX', S=0, T=0, C=[0])  # need 4D output
+                    input_img = input_reader.get_image_data('CZYX', S=0, T=0)  # need 4D output
+                    input_img = np.squeeze(input_img)
+                    input_img = np.expand_dims(input_img, axis=0)
 
                     # cmap tensor
-                    costmap_reader = AICSImage(fn+'_CM.ome.tif') # ZYX
-                    costmap = costmap_reader.get_image_data('CZYX', S=0, T=0, C=[0])  # need 4D output
+                    costmap_reader = AICSImage(fn+'_CM.ome.tif')  # ZYX
+                    costmap = costmap_reader.get_image_data('CZYX', S=0, T=0)
+                    costmap = np.squeeze(costmap)
 
-                    # output 
+                    # output
                     outputs = model_inference(model, input_img, model.final_activation, args_inference)
-                    
+
                     assert len(validation_config['OutputCh'])//2 == len(outputs)
 
                     for vi in range(len(outputs)):

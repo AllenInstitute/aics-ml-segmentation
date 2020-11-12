@@ -204,7 +204,7 @@ def compute_iou(prediction, gt, cmap):
     area_u = np.logical_or(prediction, gt)
     area_u[cmap==0]=False
 
-    return np.count_nonzero(area_i) / np.count_nonzero(area_u)
+    return np.count_nonzero(area_i) / (np.count_nonzero(area_u) + 0.001)
 
 def get_logger(name, level=logging.INFO):
     logger = logging.getLogger(name)
