@@ -135,7 +135,7 @@ def main():
     elif inf_config['name'] == 'folder':
         from glob import glob
         filenames = glob(inf_config['InputDir'] + '/*' + inf_config['DataType'])
-        filenames.sort() #(reverse=True)
+        filenames.sort()
         print('files to be processed:')
         print(filenames)
 
@@ -144,8 +144,16 @@ def main():
             # load data
             data_reader = AICSImage(fn)
             img = data_reader.get_image_data('CZYX', S=0, T=0, C=config['InputCh']).astype(float)
-            if len(config['ResizeRatio'])>0:
-                img = zoom(img, (1,config['ResizeRatio'][0], config['ResizeRatio'][1], config['ResizeRatio'][2]), order=2, mode='reflect')
+            #img = data_reader.get_image_data('CZYX', S=0, T=0).astype(float)
+            # HACK, must fix soon
+            # img = img[config['InputCh'], :, :, :]
+            if len(config['ResizeRatio']) > 0:
+                img = zoom(img, (
+                    1,
+                    config['ResizeRatio'][0],
+                    config['ResizeRatio'][1],
+                    config['ResizeRatio'][2]
+                ), order=2, mode='reflect')
             img = image_normalization(img, config['Normalization'])
 
             # apply the model

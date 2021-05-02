@@ -5,24 +5,19 @@ import sys
 import logging
 import argparse
 import traceback
-import importlib
-import pathlib
-import csv
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import matplotlib
 from glob import glob
-from random import shuffle
-from scipy import stats
-from skimage.io import imsave
 from skimage.draw import line, polygon
-from scipy import ndimage as ndi
 
 from aicssegmentation.core.utils import histogram_otsu
 from aicsimageio import AICSImage
 from aicsimageio.writers import OmeTiffWriter
 from aicsmlsegment.utils import input_normalization
+
+from tifffile import imread
 
 matplotlib.use('TkAgg')
 
@@ -273,13 +268,20 @@ class Executor(object):
 
             filenames = glob(args.raw_path + os.sep +'*' + args.data_type)
             filenames.sort()
-            with open(args.csv_name, 'w') as csvfile:
-                filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                filewriter.writerow(['raw','seg','score','mask'])
-                for _, fn in enumerate(filenames):
-                    seg_fn = args.seg_path + os.sep + os.path.basename(fn)[:-1*len(args.data_type)] + '_struct_segmentation.tiff'
-                    assert os.path.exists(seg_fn)
-                    filewriter.writerow([fn, seg_fn , None , None])
+            data_table = []
+            for _, fn in enumerate(filenames):
+                seg_fn = args.seg_path + os.sep + os.path.basename(fn)[:-1*len(args.data_type)] + '_struct_segmentation.tiff'
+                assert os.path.exists(seg_fn)
+                data_table.append({
+                        "raw": fn,
+                        "seg": seg_fn,
+                        "score": None,
+                        "mask": None
+                    }
+                )
+            df = pd.DataFrame(data_table)
+            df.to_csv(args.csv_name, index=False)
+
 
     def execute(self, args):
 
@@ -292,15 +294,19 @@ class Executor(object):
             if not np.isnan(row['score']) and (row['score']==1 or row['score']==0):
                 continue
 
-            reader = AICSImage(row['raw'])
-            struct_img = reader.get_image_data("ZYX", S=0, T=0, C=args.input_channel)
+            # HACK, fix ASAP
+            struct_img = imread(row['raw'])
+            #reader = AICSImage(row['raw'])
+            #struct_img = reader.get_image_data("ZYX", S=0, T=0, C=args.input_channel)
             struct_img[struct_img>5000] = struct_img.min()  # adjust contrast
             raw_img = (struct_img- struct_img.min() + 1e-8)/(struct_img.max() - struct_img.min() + 1e-8)
             raw_img = 255 * raw_img
             raw_img = raw_img.astype(np.uint8)
 
-            reader_seg = AICSImage(row['seg'])
-            seg = reader_seg.get_image_date("ZYX", S=0, T=0, C=0)
+            # HACK, fix ASAP
+            seg = imread(row['seg'])
+            #reader_seg = AICSImage(row['seg'])
+            #seg = reader_seg.get_image_date("ZYX", S=0, T=0, C=0)
 
             score = gt_sorting(raw_img, seg)
             if score == 1:

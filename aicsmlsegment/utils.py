@@ -8,7 +8,7 @@ import os
 from scipy import ndimage as ndi
 from scipy import stats
 import argparse
-
+from aicssegmentation.core.pre_processing_utils import intensity_normalization as hacky_test
 import yaml
 
 def load_config(config_path):
@@ -127,6 +127,14 @@ def input_normalization(img, args):
         elif args.Normalization == 18: # h2b
             struct_img = background_sub(struct_img,50)
             struct_img = simple_norm(struct_img, 1.5, 10)
+            img[ch_idx,:,:,:] = struct_img[:,:,:]
+        elif args.Normalization == 20: # nucleolus segmentaion (FBL combined)
+            #struct_img = simple_norm(struct_img, 0.5, 15)
+            struct_img = hacky_test(struct_img, [0.5, 18])
+            img[ch_idx,:,:,:] = struct_img[:,:,:]
+        elif args.Normalization == 21: # nucleolus segmentaion (NPM1 combined)
+            #struct_img = simple_norm(struct_img, 0.5, 15)
+            struct_img = hacky_test(struct_img, [0.5, 15])
             img[ch_idx,:,:,:] = struct_img[:,:,:]
         else:
             print('no normalization recipe found')
